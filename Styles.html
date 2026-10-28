@@ -1,0 +1,14 @@
+<style>
+[hidden]{display:none!important}
+#question,#details dd,#status{overflow-wrap:anywhere;white-space:pre-wrap}
+body{min-height:100vh}
+
+.study-tabs{background:#e5eae7;--bs-nav-pills-link-active-bg:#205b45;--bs-nav-link-color:#205b45;--bs-nav-link-hover-color:#123c2d}
+.study-tabs .badge{background:#205b4510;color:inherit}
+.study-tabs .active .badge{background:#ffffff30}
+#status:empty{display:none}
+.daily-navigation{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem}
+.daily-navigation #previous{justify-self:start}
+.daily-navigation #next{justify-self:end}
+@media(max-width:380px){.daily-navigation .btn{font-size:.8rem;padding:.45rem}.daily-navigation #progress{font-size:.75rem}}
+</style>

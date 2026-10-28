@@ -1,0 +1,8 @@
+<script>
+class ApiClient {
+  load() { return new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).apiLoad()); }
+  initialize(input) { return new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).apiInitialize(input)); }
+  saveNotes(input) { return new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).apiSaveNotes(input)); }
+  grade(input) { return new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).apiGrade(input)); }
+}
+</script>

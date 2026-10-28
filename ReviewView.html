@@ -1,0 +1,70 @@
+<script>
+class ReviewView {
+  constructor() { this.el = id => document.getElementById(id); }
+  message(text) { this.el('status').textContent = text; }
+  render(m) {
+    document.querySelectorAll('button').forEach(e => e.disabled = m.busy);
+    for (const mode of ['daily', 'exam']) {
+      const button = this.el(mode + 'Tab');
+      button.classList.toggle('active', m.mode === mode);
+      button.setAttribute('aria-selected', String(m.mode === mode));
+      button.disabled = m.busy || !!m.pending;
+    }
+    const exam = m.mode === 'exam';
+    this.el('studyPanel').setAttribute('aria-labelledby', m.mode + 'Tab');
+    this.el('dailyCount').textContent = m.dailyCards.length;
+    this.el('examCount').textContent = m.examCards.length;
+    this.el('card').hidden = !m.current;
+    this.el('empty').hidden = !!m.current || m.busy;
+    this.el('emptyTitle').textContent = exam ? 'No exams due' : 'No first-stage words';
+    this.el('emptyText').textContent = exam ? 'You’re caught up for today.' : 'New words and failed exams appear here.';
+    // Keep all box counts visible when Exam is empty, including zero counts.
+    this.el('levels').hidden = !exam;
+    this.el('levels').replaceChildren();
+    if (m.config) {
+      const counts = new Map(m.config.boxes.map(box => [box.name, 0]));
+      m.examCards.forEach(card => counts.set(card.metadata.box, (counts.get(card.metadata.box) || 0) + 1));
+      m.config.boxes.forEach(({name, days}) => {
+        const badge = document.createElement('span');
+        const active = m.current && m.current.metadata.box === name;
+        badge.className = 'badge rounded-pill ' + (active ? 'text-bg-success' : 'text-bg-light border text-secondary');
+        const count = counts.get(name);
+        badge.textContent = `${name}: ${days}d (${count} ${count === 1 ? 'word' : 'words'})`;
+        if (active) badge.setAttribute('aria-current', 'step');
+        this.el('levels').append(badge);
+      });
+    }
+    if (!m.current) return;
+    const c = m.current;
+    this.el('progress').textContent = `Word ${m.index + 1} of ${m.dailyCards.length}`;
+    this.el('question').textContent = c.fields.find(f => f.name === m.config.questionField).value;
+    this.el('reveal').hidden = exam && m.revealed;
+    this.el('reveal').textContent = m.revealed ? 'Hide details' : 'Show details';
+    this.el('details').hidden = !m.revealed;
+    this.el('notesSection').hidden = !m.revealed || !m.config.notesField;
+    if (m.config.notesField) {
+      this.el('notesLabel').textContent = m.config.notesField;
+      this.el('notes').value = m.noteValue();
+      this.el('notes').disabled = m.busy || !!m.pending;
+      this.el('saveNotes').disabled = m.busy || !!m.pending || !m.notesDirty();
+    }
+    this.el('reveal').setAttribute('aria-expanded', String(m.revealed));
+    this.el('grading').hidden = !exam || !m.revealed;
+    this.el('navigation').hidden = exam;
+    this.el('details').replaceChildren();
+    const fields = m.config.showFields.filter(name => name !== m.config.notesField).map(name => c.fields.find(f => f.name === name));
+    if (m.config.showSheetName) fields.push({name: 'Sheet name', value: c.sheetName});
+    fields.forEach(f => {
+      const label = document.createElement('dt'); label.textContent = f.name; label.className = 'small text-secondary fw-normal';
+      const value = document.createElement('dd'); value.textContent = f.value; value.dir = 'auto'; value.className = 'mb-3';
+      this.el('details').append(label, value);
+    });
+    this.el('previous').disabled = m.busy || m.cards.length < 2;
+    this.el('next').disabled = m.busy || m.cards.length < 2;
+    if (m.pending) {
+      this.el('reveal').disabled = true;
+      ['pass', 'fail'].forEach(id => this.el(id).disabled = m.busy || id !== m.pending.button);
+    }
+  }
+}
+</script>

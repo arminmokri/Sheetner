@@ -1,0 +1,28 @@
+<script>
+class ClipboardService {
+  async copy(text) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      try { await navigator.clipboard.writeText(text); return; }
+      catch (_) { /* Embedded browsers may restrict the Clipboard API. */ }
+    }
+    // Compatibility fallback; report failure instead of claiming the copy succeeded.
+    const previousFocus = document.activeElement;
+    const selection = window.getSelection();
+    const ranges = [];
+    if (selection) for (let i = 0; i < selection.rangeCount; i++) ranges.push(selection.getRangeAt(i).cloneRange());
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.setAttribute('readonly', '');
+    input.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.append(input);
+    try {
+      input.focus(); input.select();
+      if (!document.execCommand('copy')) throw new Error('Copy was blocked. Select the question text and copy it manually.');
+    } finally {
+      input.remove();
+      if (previousFocus && previousFocus.focus) previousFocus.focus();
+      if (selection) { selection.removeAllRanges(); ranges.forEach(range => selection.addRange(range)); }
+    }
+  }
+}
+</script>

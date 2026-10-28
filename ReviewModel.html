@@ -1,0 +1,51 @@
+<script>
+class ReviewModel {
+  constructor() {
+    this.dailyCards = []; this.examCards = []; this.dailyIndex = 0;
+    this.noteDrafts = new Map();
+    this.mode = 'daily'; this.revealed = false; this.busy = false; this.pending = null;
+  }
+  get cards() { return this.mode === 'daily' ? this.dailyCards : this.examCards; }
+  get index() { return this.mode === 'daily' ? this.dailyIndex : 0; }
+  get current() { return this.cards[this.index]; }
+  matches(a, b) { return a.sheetName === b.sheetName && a.rowNumber === b.rowNumber; }
+  load(data) {
+    this.dailyCards = data.dailyCards.slice(); this.examCards = data.examCards.slice().sort((a, b) => (data.examOrder === 'ascending' ? 1 : -1) * (data.boxes.findIndex(box => box.name === a.metadata.box) - data.boxes.findIndex(box => box.name === b.metadata.box)));
+    this.config = data; this.dailyIndex = 0; this.revealed = false; this.pending = null;
+  }
+  noteKey(card) { return JSON.stringify([card.sheetName, card.rowNumber]); }
+  savedNote() { return this.current.fields.find(f => f.name === this.config.notesField)?.value || ''; }
+  noteValue() { const key = this.noteKey(this.current); return this.noteDrafts.has(key) ? this.noteDrafts.get(key) : this.savedNote(); }
+  notesDirty() { return !!this.current && this.noteValue() !== this.savedNote(); }
+  setNote(value) { this.noteDrafts.set(this.noteKey(this.current), value); }
+  notesSaved(card) { this.update(card); this.noteDrafts.delete(this.noteKey(card)); }
+  switchMode(mode) {
+    if (this.busy || this.pending || !['daily', 'exam'].includes(mode)) return;
+    this.mode = mode; this.revealed = false;
+  }
+  move(delta) {
+    if (this.mode !== 'daily' || this.busy || !this.dailyCards.length) return;
+    const count = this.dailyCards.length;
+    this.dailyIndex = ((this.dailyIndex + delta) % count + count) % count;
+    this.revealed = false;
+  }
+  update(card) {
+    this.dailyCards = this.dailyCards.map(c => this.matches(c, card) ? card : c);
+    this.examCards = this.examCards.map(c => this.matches(c, card) ? card : c);
+  }
+  complete(card) {
+    this.examCards = this.examCards.filter(c => !this.matches(c, card));
+    const index = this.dailyCards.findIndex(c => this.matches(c, card));
+    if (card.metadata.box === this.config.boxes[0].name) {
+      // Failed words return immediately; do not duplicate an existing daily word.
+      if (index >= 0) this.dailyCards[index] = card;
+      else this.dailyCards.push(card);
+    } else if (index >= 0) {
+      this.dailyCards.splice(index, 1);
+      if (index < this.dailyIndex) this.dailyIndex -= 1;
+    }
+    this.dailyIndex = Math.max(0, Math.min(this.dailyIndex, this.dailyCards.length - 1));
+    this.revealed = false;
+  }
+}
+</script>

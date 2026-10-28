@@ -1,0 +1,115 @@
+<script>
+class ReviewController {
+  constructor(model, view, api, clipboard) { this.model = model; this.view = view; this.api = api; this.clipboard = clipboard || new ClipboardService(); }
+  start() {
+    const e = this.view.el;
+    e('copyQuestion').onclick = () => this.copyQuestion();
+    e('notes').oninput = () => { this.model.setNote(e('notes').value); e('saveNotes').disabled = this.model.busy || !!this.model.pending || !this.model.notesDirty(); };
+    e('saveNotes').onclick = () => this.saveNotes();
+    e('reload').onclick = () => this.load();
+    e('dailyTab').onclick = () => this.switchMode('daily');
+    e('examTab').onclick = () => this.switchMode('exam');
+    // Arrow keys move focus between the two native tab buttons.
+    for (const mode of ['daily', 'exam']) {
+      e(mode + 'Tab').onkeydown = event => {
+        if (['ArrowLeft', 'ArrowRight'].includes(event.key) && !this.model.busy && !this.model.pending) {
+          event.preventDefault(); const next = mode === 'daily' ? 'exam' : 'daily';
+          this.switchMode(next); e(next + 'Tab').focus();
+        }
+      };
+    }
+    e('previous').onclick = () => this.move(-1);
+    e('next').onclick = () => this.move(1);
+    e('reveal').onclick = () => this.reveal();
+    e('pass').onclick = () => this.grade(true, 'pass');
+    e('fail').onclick = () => this.grade(false, 'fail');
+    this.load();
+  }
+  switchMode(mode) {
+    this.model.switchMode(mode); this.view.render(this.model);
+    if (!this.model.busy && !this.model.pending) this.view.message('');
+  }
+  async copyQuestion() {
+    const card = this.model.current;
+    if (!card || this.model.busy) return;
+    const question = card.fields.find(field => field.name === this.model.config.questionField).value;
+    try { await this.clipboard.copy(question); this.view.message('Question copied to clipboard.'); }
+    catch (error) { this.view.message(error.message || 'Could not copy the question.'); }
+  }
+  move(delta) {
+    const m = this.model;
+    if (m.busy || m.pending || m.mode !== 'daily' || m.dailyCards.length < 2) return;
+    const skipped = m.current;
+    m.move(delta);
+    this.view.render(m);
+    if (skipped && !skipped.initialized) {
+      const question = skipped.fields.find(field => field.name === m.config.questionField).value;
+      this.view.message('Skipped “' + question + '” without reading it. It will remain in Daily words and will not be scheduled for tomorrow’s Exam until you reveal its details.');
+    } else { this.view.message(''); }
+  }
+  async saveNotes() {
+    const m = this.model;
+    if (m.busy || m.pending || !m.current || !m.notesDirty()) return;
+    const card = m.current;
+    const input = {sheetName: card.sheetName, rowNumber: card.rowNumber, value: m.noteValue(), expectedValue: m.savedNote()};
+    m.busy = true; this.view.render(m);
+    try {
+      const result = await this.api.saveNotes(input);
+      m.notesSaved(result.card);
+      this.view.message('Notes saved for “' + card.fields.find(f => f.name === m.config.questionField).value + '”.');
+    } catch (error) { this.view.message(error.message || String(error)); }
+    finally { m.busy = false; this.view.render(m); }
+  }
+  async reveal() {
+    const m = this.model;
+    if (m.busy || m.pending || !m.current) return;
+    if (m.mode === 'daily') this.view.message('');
+    if (m.mode === 'daily' && m.revealed) { m.revealed = false; this.view.render(m); return; }
+    if (!m.current.initialized) {
+      m.busy = true; this.view.render(m);
+      try {
+        const result = await this.api.initialize({sheetName: m.current.sheetName, rowNumber: m.current.rowNumber});
+        m.update(result.card);
+        if (result.card.metadata.box !== m.config.boxes[0].name || result.card.metadata.nextReviewAt <= m.config.today) {
+          await this.refreshAfterConflict_();
+          this.view.message('This word advanced in another tab. Lists refreshed.');
+          return;
+        }
+        this.view.message('');
+        m.revealed = true;
+      } catch (error) {
+        this.view.message((error.message || String(error)) + ' Press Show details to retry.');
+      } finally { m.busy = false; this.view.render(m); }
+    } else { m.revealed = true; this.view.render(m); }
+  }
+  async refreshAfterConflict_() { this.model.load(await this.api.load()); }
+  async load() {
+    if (this.model.busy) return;
+    this.model.busy = true; this.view.render(this.model); this.view.message('Loading your words…');
+    try {
+      this.model.load(await this.api.load());
+      this.view.message('');
+    } catch (error) { this.view.message(error.message || String(error)); }
+    finally { this.model.busy = false; this.view.render(this.model); }
+  }
+  async grade(passed, button) {
+    const m = this.model;
+    if (m.busy || !m.current || m.mode !== 'exam' || !m.revealed) return;
+    if (m.pending && m.pending.button !== button) return;
+    if (!m.pending) m.pending = {button, input: {
+      sheetName: m.current.sheetName, rowNumber: m.current.rowNumber, mode: 'exam', passed
+    }};
+    m.busy = true; this.view.render(m);
+    try {
+      const result = await this.api.grade(m.pending.input);
+      m.pending = null; m.complete(result.card);
+      const question = result.card.fields.find(field => field.name === m.config.questionField).value;
+      this.view.message(result.passed
+        ? 'You marked “' + question + '” as known. It is now in ' + result.card.metadata.box + '. Its next exam is on ' + result.card.metadata.nextReviewAt + '.'
+        : 'You marked “' + question + '” as unknown. It returned to ' + m.config.boxes[0].name + ' and Daily words. Its next exam is on ' + result.card.metadata.nextReviewAt + '.');
+    } catch (error) {
+      this.view.message((error.message || String(error)) + ' Retry the same button, or reload to fetch current progress.');
+    } finally { m.busy = false; this.view.render(m); }
+  }
+}
+</script>
